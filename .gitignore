@@ -1,0 +1,7 @@
+# Never commit real credentials or local config
+config.toml
+*.local.toml
+secrets*
+__pycache__/
+*.pyc
+.venv/

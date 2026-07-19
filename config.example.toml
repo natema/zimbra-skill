@@ -1,0 +1,76 @@
+# zmail configuration — copy this to ~/.config/zimbra/config.toml and fill in:
+#   mkdir -p ~/.config/zimbra
+#   cp config.example.toml ~/.config/zimbra/config.toml
+#   chmod 600 ~/.config/zimbra/config.toml
+# Override the location with the $ZMAIL_CONFIG environment variable.
+#
+# Never commit your real config — it contains (or points to) secrets.
+# This example is safe to share: it holds only placeholders.
+
+# Account used when you don't pass -a/--account on the command line.
+default = "work"
+
+# --- A generic Zimbra account ----------------------------------------------
+[accounts.work]
+email         = "you@example.org"       # your address; used as the From:
+from_name     = "Your Name"             # display name on outgoing mail
+username      = "you@example.org"        # LOGIN for IMAP/SMTP; may differ from email
+imap_host     = "mail.example.org"
+imap_port     = 993                      # IMAPS (SSL/TLS)
+smtp_host     = "mail.example.org"
+smtp_port     = 587                      # 587 = STARTTLS, 465 = SSL
+smtp_security = "starttls"               # "starttls" or "ssl"
+
+# Password — set exactly ONE source (checked in this order):
+#   password_cmd : a shell command whose stdout is the password (recommended)
+#   password_env : the name of an environment variable holding the password
+#   password     : the literal password/app-passcode (keep the file chmod 600)
+# See the README "Authentication setup" for the recommended file-based recipe.
+password_cmd = "cat ~/.config/zimbra/work.pass"
+# password_env = "ZMAIL_WORK_PASSWORD"
+# password     = "app-passcode-here"
+
+# If the account has TWO-FACTOR AUTH, your normal password won't work over
+# IMAP/SMTP — generate an application passcode in webmail
+# (Preferences > Accounts > Applications > Add Application Code) and use that.
+
+# ---------------------------------------------------------------------------
+# Presets for common Zimbra services. The hostnames below are public
+# infrastructure — uncomment a block and drop in your own address/login.
+# ---------------------------------------------------------------------------
+
+# Inria (France) — note the login is usually a short username, NOT the email.
+# [accounts.inria]
+# email         = "you@inria.fr"
+# from_name     = "Your Name"
+# username      = "your_inria_login"
+# imap_host     = "zimbra.inria.fr"
+# imap_port     = 993
+# smtp_host     = "smtp.inria.fr"
+# smtp_port     = 587
+# smtp_security = "starttls"
+# password_cmd  = "cat ~/.config/zimbra/inria.pass"
+
+# CNRS (France) — the central portal webmail.cnrs.fr also fronts IMAP/SMTP.
+# [accounts.cnrs]
+# email         = "firstname.lastname@cnrs.fr"
+# from_name     = "Your Name"
+# username      = "firstname.lastname@cnrs.fr"   # some units use a backend login
+# imap_host     = "webmail.cnrs.fr"
+# imap_port     = 993
+# smtp_host     = "webmail.cnrs.fr"
+# smtp_port     = 465
+# smtp_security = "ssl"
+# password_cmd  = "cat ~/.config/zimbra/cnrs.pass"
+
+# RENATER Partage — shared Zimbra for many French universities and labs.
+# [accounts.partage]
+# email         = "you@univ-example.fr"
+# from_name     = "Your Name"
+# username      = "you@univ-example.fr"
+# imap_host     = "imap.partage.renater.fr"
+# imap_port     = 993
+# smtp_host     = "smtp.partage.renater.fr"
+# smtp_port     = 465
+# smtp_security = "ssl"
+# password_cmd  = "cat ~/.config/zimbra/partage.pass"
