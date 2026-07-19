@@ -17,6 +17,7 @@ import email
 import email.utils
 import imaplib
 import json
+import mimetypes
 import os
 import smtplib
 import ssl
@@ -321,7 +322,21 @@ def build_message(acct: dict[str, Any], args: argparse.Namespace) -> EmailMessag
     if args.body_file:
         body = Path(args.body_file).read_text()
     msg.set_content(body or "")
+    for path in getattr(args, "attach", None) or []:
+        _attach_file(msg, path)
     return msg
+
+
+def _attach_file(msg: EmailMessage, path: str) -> None:
+    p = Path(path).expanduser()
+    if not p.is_file():
+        die(f"attachment not found: {path}")
+    ctype, encoding = mimetypes.guess_type(str(p))
+    if ctype is None or encoding is not None:
+        ctype = "application/octet-stream"  # unknown or compressed -> generic binary
+    maintype, subtype = ctype.split("/", 1)
+    msg.add_attachment(p.read_bytes(), maintype=maintype, subtype=subtype,
+                       filename=p.name)
 
 
 def cmd_draft(args: argparse.Namespace) -> None:
@@ -460,6 +475,8 @@ def main(argv: list[str] | None = None) -> None:
         sp.add_argument("--body", help="message body text")
         sp.add_argument("--body-file", help="read body from a file")
         sp.add_argument("--cc")
+        sp.add_argument("--attach", action="append", metavar="PATH",
+                        help="file to attach (repeatable)")
         sp.add_argument("--in-reply-to", help="Message-ID being replied to (for threading)")
         sp.add_argument("--references", help="References header value")
         if name == "draft":

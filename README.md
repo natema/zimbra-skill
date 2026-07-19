@@ -149,13 +149,15 @@ python3 zmail.py -a work read <UID> [--folder INBOX] [--mark-read]
 python3 zmail.py -a work search "term" [--limit N]
 python3 zmail.py -a work folders
 python3 zmail.py -a work draft --to X --subject S (--body T | --body-file F) \
-                     [--cc ...] [--in-reply-to <msg-id>]
+                     [--cc ...] [--attach FILE ...] [--in-reply-to <msg-id>]
 python3 zmail.py -a work send  ... --yes-really-send        # guarded
 python3 zmail.py accounts
 ```
 
 - Omit `-a/--account` to use the `default` from your config.
 - Add `--json` to any read command for machine-readable output (handy for agents).
+- Attach files with `--attach PATH` (repeat for several); the MIME type is guessed
+  from the extension. Works for both `draft` and `send`.
 - `check`/`search` print a `UID` in `[brackets]`; pass it to `read`. `read --json`
   includes the `message_id`, which you feed to `--in-reply-to` for a threaded reply.
 
@@ -177,7 +179,6 @@ device. This keeps a human in the loop by design.
 ## Roadmap / ideas
 
 - Optional Zimbra **SOAP** backend for calendar/contacts and native draft save.
-- Attachments in `draft`/`send`.
 - Convenience `reply <UID>` that pre-fills recipients and threading.
 
 Contributions welcome — it's deliberately small; keep it dependency-free.

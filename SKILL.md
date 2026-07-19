@@ -55,6 +55,10 @@ python3 zmail.py -a work draft \
 # threaded reply:
 python3 zmail.py -a work draft --to "x@y.z" --subject "Re: ..." \
   --in-reply-to "<original-message-id>" --body-file body.txt
+
+# with attachments (repeat --attach; MIME type guessed from extension):
+python3 zmail.py -a work draft --to "x@y.z" --subject "Report" \
+  --body-file body.txt --attach report.pdf --attach data.csv
 ```
 For multi-line/accented bodies, write the body to a temp file and use `--body-file`
 (avoids shell-quoting problems). Then tell the user the draft is in webmail Drafts.
