@@ -1,7 +1,7 @@
 # zimbra-skill · `zmail`
 
-A tiny, **dependency-free** command-line tool to **read, search, and draft email on
-any Zimbra mailbox** over standard IMAP/SMTP.
+A tiny, **dependency-free** command-line tool to **read, search, draft, and reply to
+email on any Zimbra mailbox** over standard IMAP/SMTP.
 
 It's just a CLI, so **any AI agent or automation can drive it** — Claude, ChatGPT/Codex,
 a cron job, a shell script — by running commands and reading their (optionally JSON)
@@ -159,7 +159,7 @@ python3 zmail.py accounts
 - Omit `-a/--account` to use the `default` from your config.
 - Add `--json` to any read command for machine-readable output (handy for agents).
 - Attach files with `--attach PATH` (repeat for several); the MIME type is guessed
-  from the extension. Works for both `draft` and `send`.
+  from the extension. Works for `draft`, `reply`, and `send`.
 - `check`/`search` print a `UID` in `[brackets]`; pass it to `read`. `read --json`
   includes the `message_id`, which you feed to `--in-reply-to` for a threaded reply.
 
@@ -189,7 +189,8 @@ device. This keeps a human in the loop by design.
 ## Roadmap / ideas
 
 - Optional Zimbra **SOAP** backend for calendar/contacts and native draft save.
-- Convenience `reply <UID>` that pre-fills recipients and threading.
+- `XOAUTH2`/OAuth2 authentication for providers that require it.
+- HTML-body composition (bodies are plain text today).
 
 Contributions welcome — it's deliberately small; keep it dependency-free.
 
