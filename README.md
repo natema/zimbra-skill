@@ -149,6 +149,7 @@ python3 zmail.py -a work draft --to X --subject S (--body T | --body-file F) \
 python3 zmail.py -a work reply <UID> (--body T | --body-file F) \
                      [--reply-all] [--cc ...] [--attach FILE ...] [--quote]
 python3 zmail.py -a work send  ... --yes-really-send        # guarded
+python3 zmail.py -a work archive <UID> [--folder INBOX] [--to Archive]
 python3 zmail.py accounts
 ```
 

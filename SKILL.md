@@ -78,6 +78,16 @@ It defaults to a draft; only add `--yes-really-send` if the user explicitly asks
 For multi-line/accented bodies, write the body to a temp file and use `--body-file`
 (avoids shell-quoting problems). Then tell the user the draft is in webmail Drafts.
 
+## Archiving
+
+```bash
+python3 zmail.py -a work archive 12345                       # INBOX -> Archive
+python3 zmail.py -a work archive 12345 --folder Archive --to "Archive/2026/work"
+```
+Moves a message between folders (uses IMAP MOVE if the server supports it, else
+COPY + delete + expunge). Not a destructive send/delete action, but still changes
+mailbox state — only archive a specific message the user pointed you at, not in bulk.
+
 ## Sending (only on explicit request)
 
 ```bash

@@ -302,6 +302,30 @@ def cmd_search(args: argparse.Namespace) -> None:
         conn.logout()
 
 
+def cmd_archive(args: argparse.Namespace) -> None:
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    conn = imap_connect(acct)
+    try:
+        typ, _ = conn.select(f'"{args.folder}"')
+        _imap_check(typ, _, f"SELECT {args.folder}")
+        uid = args.uid.encode()
+        moved = False
+        if "MOVE" in conn.capabilities:
+            typ, data = conn.uid("MOVE", uid, f'"{args.to}"')
+            moved = typ == "OK"
+        if not moved:  # server lacks MOVE (RFC 6851) -> COPY + delete + expunge
+            typ, data = conn.uid("copy", uid, f'"{args.to}"')
+            _imap_check(typ, data, f"COPY to {args.to}")
+            typ, data = conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+            _imap_check(typ, data, "STORE \\Deleted")
+            conn.expunge()
+        result = {"status": "archived", "uid": args.uid, "from": args.folder, "to": args.to}
+        emit(args, result, lambda: f"Moved UID {args.uid} from '{args.folder}' to '{args.to}'.")
+    finally:
+        conn.logout()
+
+
 def _q(s: str) -> str:
     return s  # imaplib quotes args containing spaces automatically
 
@@ -589,6 +613,12 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--no-save-sent", action="store_true",
                     help="with --yes-really-send, do not append a copy to Sent")
     sp.set_defaults(func=cmd_reply)
+
+    sp = sub.add_parser("archive", help="move a message to another folder (default: Archive)")
+    sp.add_argument("uid")
+    sp.add_argument("--folder", default="INBOX", help="folder the message is currently in")
+    sp.add_argument("--to", default="Archive", help="destination folder")
+    sp.set_defaults(func=cmd_archive)
 
     args = p.parse_args(argv)
     args.func(args)
