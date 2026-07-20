@@ -150,6 +150,8 @@ python3 zmail.py -a work search "term" [--limit N]
 python3 zmail.py -a work folders
 python3 zmail.py -a work draft --to X --subject S (--body T | --body-file F) \
                      [--cc ...] [--attach FILE ...] [--in-reply-to <msg-id>]
+python3 zmail.py -a work reply <UID> (--body T | --body-file F) \
+                     [--reply-all] [--cc ...] [--attach FILE ...] [--quote]
 python3 zmail.py -a work send  ... --yes-really-send        # guarded
 python3 zmail.py accounts
 ```
@@ -160,6 +162,14 @@ python3 zmail.py accounts
   from the extension. Works for both `draft` and `send`.
 - `check`/`search` print a `UID` in `[brackets]`; pass it to `read`. `read --json`
   includes the `message_id`, which you feed to `--in-reply-to` for a threaded reply.
+
+### Replying
+
+`reply <UID>` is a shortcut that reads the original message and pre-fills the reply:
+recipient (its `Reply-To`/`From`), a `Re:` subject, and the `In-Reply-To`/`References`
+threading headers. Add `--reply-all` to Cc the original recipients (minus yourself),
+`--quote` to append the quoted original, and `--attach` for files. It stages a **draft**
+by default; pass `--yes-really-send` to send it immediately instead.
 
 ### How drafting works
 

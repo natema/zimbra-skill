@@ -60,6 +60,21 @@ python3 zmail.py -a work draft --to "x@y.z" --subject "Re: ..." \
 python3 zmail.py -a work draft --to "x@y.z" --subject "Report" \
   --body-file body.txt --attach report.pdf --attach data.csv
 ```
+
+### Replying to a message (preferred for replies)
+
+`reply <UID>` auto-fills the recipient, `Re:` subject, and threading headers from the
+original — no need to look up the Message-ID yourself. Stages a draft by default.
+
+```bash
+# find the UID with check/search, then:
+python3 zmail.py -a work reply 12345 --body-file reply.txt          # To: sender
+python3 zmail.py -a work reply 12345 --body-file reply.txt --reply-all
+python3 zmail.py -a work reply 12345 --body-file reply.txt --quote  # include quoted original
+python3 zmail.py -a work reply 12345 --folder Archive --body-file reply.txt
+```
+Use `reply` instead of `draft --in-reply-to` when responding to an existing message.
+It defaults to a draft; only add `--yes-really-send` if the user explicitly asks to send.
 For multi-line/accented bodies, write the body to a temp file and use `--body-file`
 (avoids shell-quoting problems). Then tell the user the draft is in webmail Drafts.
 

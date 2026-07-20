@@ -339,33 +339,17 @@ def _attach_file(msg: EmailMessage, path: str) -> None:
                        filename=p.name)
 
 
-def cmd_draft(args: argparse.Namespace) -> None:
-    cfg = load_config()
-    _, acct = get_account(cfg, args.account)
-    msg = build_message(acct, args)
+def _save_draft(acct: dict[str, Any], msg: EmailMessage, folder: str = "Drafts") -> str:
     conn = imap_connect(acct)
     try:
-        folder = args.folder
-        raw = msg.as_bytes()
-        typ, data = conn.append(f'"{folder}"', "(\\Draft)", None, raw)
+        typ, data = conn.append(f'"{folder}"', "(\\Draft)", None, msg.as_bytes())
         _imap_check(typ, data, f"APPEND to {folder}")
-        result = {"status": "draft_saved", "folder": folder,
-                  "to": args.to, "subject": args.subject,
-                  "detail": data[0].decode() if data and data[0] else ""}
-        emit(args, result,
-             lambda: f"Draft saved to '{folder}'. Review & send from Zimbra webmail.\n"
-                     f"  To: {args.to}\n  Subject: {args.subject}")
+        return data[0].decode() if data and data[0] else ""
     finally:
         conn.logout()
 
 
-def cmd_send(args: argparse.Namespace) -> None:
-    if not args.yes_really_send:
-        die("Refusing to send without --yes-really-send. "
-            "Use 'draft' to stage for review instead.")
-    cfg = load_config()
-    _, acct = get_account(cfg, args.account)
-    msg = build_message(acct, args)
+def _smtp_send(acct: dict[str, Any], msg: EmailMessage, save_sent: bool = True) -> None:
     host = acct.get("smtp_host") or die("account missing smtp_host")
     port = int(acct.get("smtp_port", 587))
     security = (acct.get("smtp_security") or "starttls").lower()
@@ -387,16 +371,112 @@ def cmd_send(args: argparse.Namespace) -> None:
         die(f"SMTP send failed: {e}")
     finally:
         server.quit()
-    # Optionally file a copy into Sent (Zimbra usually does NOT auto-save for SMTP)
-    if not args.no_save_sent:
+    # File a copy into Sent (Zimbra usually does NOT auto-save for SMTP sends).
+    if save_sent:
         try:
             conn = imap_connect(acct)
             conn.append('"Sent"', "(\\Seen)", None, msg.as_bytes())
             conn.logout()
         except Exception as e:
             print(f"warning: could not save to Sent: {e}", file=sys.stderr)
+
+
+def cmd_draft(args: argparse.Namespace) -> None:
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    msg = build_message(acct, args)
+    detail = _save_draft(acct, msg, args.folder)
+    result = {"status": "draft_saved", "folder": args.folder,
+              "to": args.to, "subject": args.subject, "detail": detail}
+    emit(args, result,
+         lambda: f"Draft saved to '{args.folder}'. Review & send from Zimbra webmail.\n"
+                 f"  To: {args.to}\n  Subject: {args.subject}")
+
+
+def cmd_send(args: argparse.Namespace) -> None:
+    if not args.yes_really_send:
+        die("Refusing to send without --yes-really-send. "
+            "Use 'draft' to stage for review instead.")
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    msg = build_message(acct, args)
+    _smtp_send(acct, msg, save_sent=not args.no_save_sent)
     emit(args, {"status": "sent", "to": args.to, "subject": args.subject},
          lambda: f"Sent to {args.to}: {args.subject}")
+
+
+def cmd_reply(args: argparse.Namespace) -> None:
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    conn = imap_connect(acct)
+    try:
+        typ, _ = conn.select(f'"{args.folder}"', readonly=True)
+        _imap_check(typ, _, f"SELECT {args.folder}")
+        typ, fetched = conn.uid("fetch", args.uid.encode(), "(RFC822)")
+        _imap_check(typ, fetched, "FETCH")
+        if not fetched or fetched[0] is None:
+            die(f"No message with UID {args.uid} in {args.folder}.")
+        orig = email.message_from_bytes(fetched[0][1])
+    finally:
+        conn.logout()
+
+    self_addrs = {a.lower() for a in (acct.get("email"), acct.get("username")) if a}
+    reply_to = [a for _, a in email.utils.getaddresses(orig.get_all("Reply-To", [])) if a]
+    from_ = [a for _, a in email.utils.getaddresses(orig.get_all("From", [])) if a]
+    to_addrs = reply_to or from_
+    if not to_addrs:
+        die("Could not determine a reply recipient from the original message.")
+
+    cc_addrs: list[str] = []
+    if args.reply_all:
+        seen = {a.lower() for a in to_addrs} | self_addrs
+        for _, a in email.utils.getaddresses(
+                orig.get_all("To", []) + orig.get_all("Cc", [])):
+            if a and a.lower() not in seen:
+                cc_addrs.append(a)
+                seen.add(a.lower())
+    if args.cc:
+        cc_addrs.extend(a.strip() for a in args.cc.split(",") if a.strip())
+
+    # Collapse folding whitespace/newlines — header values may not contain them.
+    subject = " ".join((_decode(orig.get("Subject")) or "").split())
+    if not subject.lower().startswith("re:"):
+        subject = ("Re: " + subject).strip()
+
+    msgid = "".join((orig.get("Message-ID") or "").split())
+    refs = " ".join((orig.get("References") or "").split())
+    references = f"{refs} {msgid}".strip() if refs else msgid
+
+    body = args.body or ""
+    if args.body_file:
+        body = Path(args.body_file).read_text()
+    if args.quote:
+        quoted = "\n".join("> " + ln for ln in extract_text(orig).splitlines())
+        attrib = f"On {_decode(orig.get('Date'))}, {_decode(orig.get('From'))} wrote:"
+        body = f"{body}\n\n{attrib}\n{quoted}\n"
+
+    # Reuse build_message by populating the fields it reads.
+    args.to = ", ".join(to_addrs)
+    args.cc = ", ".join(cc_addrs) if cc_addrs else None
+    args.subject = subject
+    args.in_reply_to = msgid or None
+    args.references = references or None
+    args.body = body
+    args.body_file = None
+    msg = build_message(acct, args)
+
+    if args.yes_really_send:
+        _smtp_send(acct, msg, save_sent=not args.no_save_sent)
+        emit(args, {"status": "sent", "to": args.to, "cc": args.cc, "subject": subject},
+             lambda: f"Sent reply to {args.to}: {subject}")
+    else:
+        detail = _save_draft(acct, msg, "Drafts")
+        emit(args, {"status": "draft_saved", "folder": "Drafts", "to": args.to,
+                    "cc": args.cc, "subject": subject, "detail": detail},
+             lambda: "Reply draft saved to 'Drafts'. Review & send from webmail.\n"
+                     f"  To: {args.to}\n"
+                     f"{('  Cc: ' + args.cc + chr(10)) if args.cc else ''}"
+                     f"  Subject: {subject}")
 
 
 # --------------------------------------------------------------------------- #
@@ -488,6 +568,24 @@ def main(argv: list[str] | None = None) -> None:
             sp.add_argument("--no-save-sent", action="store_true",
                             help="do not append a copy to the Sent folder")
             sp.set_defaults(func=cmd_send)
+
+    sp = sub.add_parser("reply", help="draft (or send) a threaded reply to a message by UID")
+    sp.add_argument("uid")
+    sp.add_argument("--folder", default="INBOX", help="folder the original is in")
+    sp.add_argument("--body", help="reply body text")
+    sp.add_argument("--body-file", help="read reply body from a file")
+    sp.add_argument("--cc", help="extra Cc addresses (comma-separated)")
+    sp.add_argument("--reply-all", action="store_true",
+                    help="also Cc the original To/Cc recipients (minus yourself)")
+    sp.add_argument("--attach", action="append", metavar="PATH",
+                    help="file to attach (repeatable)")
+    sp.add_argument("--quote", action="store_true",
+                    help="append the quoted original message")
+    sp.add_argument("--yes-really-send", action="store_true",
+                    help="send now instead of saving a draft")
+    sp.add_argument("--no-save-sent", action="store_true",
+                    help="with --yes-really-send, do not append a copy to Sent")
+    sp.set_defaults(func=cmd_reply)
 
     args = p.parse_args(argv)
     args.func(args)
