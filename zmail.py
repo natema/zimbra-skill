@@ -315,6 +315,9 @@ def build_message(acct: dict[str, Any], args: argparse.Namespace) -> EmailMessag
     if args.cc:
         msg["Cc"] = args.cc
     msg["Subject"] = args.subject
+    msg["Date"] = email.utils.formatdate(localtime=True)
+    domain = from_addr.rsplit("@", 1)[-1] if "@" in from_addr else None
+    msg["Message-ID"] = email.utils.make_msgid(domain=domain)
     if getattr(args, "in_reply_to", None):
         msg["In-Reply-To"] = args.in_reply_to
         msg["References"] = getattr(args, "references", None) or args.in_reply_to
