@@ -13,11 +13,7 @@ Drafts you stage appear in **Zimbra webmail's Drafts folder**, ready for you to
 review and send. Sending is a separate, explicitly-confirmed command — the agent
 never sends mail on its own.
 
-```text
-$ zmail check --unread
-• [ 4821] Tue, 15 Jul 2026   program-chairs@confer…   Reviews for submission #217 are available
-  [ 4817] Mon, 14 Jul 2026   coauthor@example.org     Re: draft of section 4
-```
+![zmail demo — triage unread mail and stage a threaded reply with attachments](docs/demo.gif)
 
 ## Why another email tool?
 
