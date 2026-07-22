@@ -275,13 +275,18 @@ def cmd_search(args: argparse.Namespace) -> None:
     try:
         typ, _ = conn.select(f'"{args.folder}"', readonly=True)
         _imap_check(typ, _, f"SELECT {args.folder}")
-        # Search FROM/SUBJECT/BODY for the term; charset UTF-8 for accents.
+        # Search FROM/SUBJECT/BODY for the term. Prefer charset UTF-8 (accents),
+        # but some servers (e.g. CNRS Zimbra) reject the charset arg with a BAD
+        # response — raised as imaplib.IMAP4.error, not a non-OK typ — so fall
+        # back to the same full query without a charset (ASCII).
         term = args.query
-        typ, data = conn.uid(
-            "search", "UTF-8",
-            "OR", "OR", "FROM", _q(term), "SUBJECT", _q(term), "BODY", _q(term))
-        if typ != "OK":  # some servers dislike charset; retry ASCII SUBJECT-only
-            typ, data = conn.uid("search", None, "SUBJECT", _q(term))
+        query = ("OR", "OR", "FROM", _q(term), "SUBJECT", _q(term), "BODY", _q(term))
+        try:
+            typ, data = conn.uid("search", "UTF-8", *query)
+            if typ != "OK":
+                typ, data = conn.uid("search", None, *query)
+        except imaplib.IMAP4.error:
+            typ, data = conn.uid("search", None, *query)
         _imap_check(typ, data, "SEARCH")
         uids = data[0].split()[-args.limit:][::-1]
         rows = []
