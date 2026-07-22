@@ -13,6 +13,12 @@ description: >-
 A stdlib-only Python CLI (`zmail.py`) over Zimbra IMAP/SMTP. Accounts and
 credentials live in `~/.config/zimbra/config.toml` (never in the repo).
 
+**Read the site notes first.** If `~/.config/zimbra/NOTES.md` exists, read it before
+running account-specific commands — it records this machine's quirks (which account
+"email" defaults to, `username` login forms, exact folder names like `Archive` vs
+`Archives`, server capabilities such as missing IMAP `MOVE`). It's private and lives
+outside the repo. Keep it updated when you discover a new quirk.
+
 **Safety posture:** the default action STAGES a draft in the user's Drafts folder
 (visible/editable/sendable from Zimbra webmail). Only run `send` after the user
 explicitly asks to send, and it still requires `--yes-really-send`.
