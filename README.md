@@ -150,6 +150,8 @@ python3 zmail.py -a work reply <UID> (--body T | --body-file F) \
                      [--reply-all] [--cc ...] [--attach FILE ...] [--quote]
 python3 zmail.py -a work send  ... --yes-really-send        # guarded
 python3 zmail.py -a work archive <UID> [--folder INBOX] [--to Archive]
+python3 zmail.py -a work delete  <UID> [--folder INBOX]              # -> Trash
+python3 zmail.py -a work delete  <UID> --purge --yes-really-delete   # permanent (guarded)
 python3 zmail.py accounts
 ```
 

@@ -94,6 +94,19 @@ Moves a message between folders (uses IMAP MOVE if the server supports it, else
 COPY + delete + expunge). Not a destructive send/delete action, but still changes
 mailbox state — only archive a specific message the user pointed you at, not in bulk.
 
+## Deleting
+
+```bash
+python3 zmail.py -a work delete 12345                       # move to Trash (recoverable)
+python3 zmail.py -a work delete 12345 --folder Archive      # delete from another folder
+python3 zmail.py -a work delete 12345 --folder Trash --purge --yes-really-delete   # permanent
+```
+Default `delete` just moves the message to **Trash** — recoverable from webmail, like
+hitting delete there. Permanent removal needs BOTH `--purge` and `--yes-really-delete`;
+without the confirmation flag it refuses. Only delete a specific message the user
+pointed you at, never in bulk on your own. (Trash folder name defaults to `Trash`;
+override with `--trash` if the site differs.)
+
 ## Sending (only on explicit request)
 
 ```bash

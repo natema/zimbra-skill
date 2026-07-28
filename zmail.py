@@ -331,6 +331,47 @@ def cmd_archive(args: argparse.Namespace) -> None:
         conn.logout()
 
 
+def cmd_delete(args: argparse.Namespace) -> None:
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    conn = imap_connect(acct)
+    try:
+        typ, _ = conn.select(f'"{args.folder}"')
+        _imap_check(typ, _, f"SELECT {args.folder}")
+        uid = args.uid.encode()
+
+        if args.purge:  # irreversible: expunge in place
+            if not args.yes_really_delete:
+                die("refusing to permanently delete without --yes-really-delete "
+                    "(drop --purge to move the message to Trash instead, which is recoverable)")
+            typ, data = conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+            _imap_check(typ, data, "STORE \\Deleted")
+            conn.expunge()
+            result = {"status": "purged", "uid": args.uid, "folder": args.folder}
+            emit(args, result, lambda: f"Permanently deleted UID {args.uid} from '{args.folder}'.")
+            return
+
+        # default: move to Trash (recoverable from webmail)
+        if args.folder == args.trash:
+            die(f"message is already in '{args.trash}'; "
+                "use --purge --yes-really-delete to remove it permanently")
+        moved = False
+        if "MOVE" in conn.capabilities:
+            typ, data = conn.uid("MOVE", uid, f'"{args.trash}"')
+            moved = typ == "OK"
+        if not moved:  # server lacks MOVE (RFC 6851) -> COPY + delete + expunge
+            typ, data = conn.uid("copy", uid, f'"{args.trash}"')
+            _imap_check(typ, data, f"COPY to {args.trash}")
+            typ, data = conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+            _imap_check(typ, data, "STORE \\Deleted")
+            conn.expunge()
+        result = {"status": "trashed", "uid": args.uid, "from": args.folder, "to": args.trash}
+        emit(args, result,
+             lambda: f"Moved UID {args.uid} from '{args.folder}' to '{args.trash}' (recoverable).")
+    finally:
+        conn.logout()
+
+
 def _q(s: str) -> str:
     return s  # imaplib quotes args containing spaces automatically
 
@@ -624,6 +665,16 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--folder", default="INBOX", help="folder the message is currently in")
     sp.add_argument("--to", default="Archive", help="destination folder")
     sp.set_defaults(func=cmd_archive)
+
+    sp = sub.add_parser("delete", help="move a message to Trash (or --purge to delete permanently)")
+    sp.add_argument("uid")
+    sp.add_argument("--folder", default="INBOX", help="folder the message is currently in")
+    sp.add_argument("--trash", default="Trash", help="Trash folder name (default: Trash)")
+    sp.add_argument("--purge", action="store_true",
+                    help="permanently expunge instead of moving to Trash (irreversible)")
+    sp.add_argument("--yes-really-delete", action="store_true",
+                    help="required confirmation for --purge")
+    sp.set_defaults(func=cmd_delete)
 
     args = p.parse_args(argv)
     args.func(args)
