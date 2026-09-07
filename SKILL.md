@@ -84,6 +84,19 @@ It defaults to a draft; only add `--yes-really-send` if the user explicitly asks
 For multi-line/accented bodies, write the body to a temp file and use `--body-file`
 (avoids shell-quoting problems). Then tell the user the draft is in webmail Drafts.
 
+## Attachments
+
+```bash
+python3 zmail.py -a work attachments 12345                       # list what's attached
+python3 zmail.py -a work attachments 12345 --save --outdir ~/docs   # save them all
+python3 zmail.py -a work attachments 12345 --save --index 1 --outdir .   # just the first
+```
+
+`read` shows only the message text, so use `attachments` when the user needs the
+actual files. Listing prints a 1-based index, filename, MIME type and size; feed the
+index back with `--index` (repeatable) to save a subset. Files are written under their
+own basename, and an existing file is never clobbered without `--overwrite`.
+
 ## Archiving
 
 ```bash

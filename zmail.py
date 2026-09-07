@@ -268,6 +268,79 @@ def cmd_read(args: argparse.Namespace) -> None:
         conn.logout()
 
 
+def list_attachments(msg: email.message.Message) -> list[dict[str, Any]]:
+    """Attachment parts of a message, in walk order (1-based index)."""
+    out: list[dict[str, Any]] = []
+    if not msg.is_multipart():
+        return out
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        disp = str(part.get("Content-Disposition") or "")
+        name = part.get_filename()
+        # Treat as an attachment if flagged as one, or if it is a non-text part
+        # carrying a filename (some clients omit the disposition header).
+        if "attachment" not in disp.lower() and not (
+                name and part.get_content_maintype() != "text"):
+            continue
+        payload = part.get_payload(decode=True) or b""
+        out.append({
+            "index": len(out) + 1,
+            "filename": _decode(name) if name else f"part{len(out) + 1}.bin",
+            "content_type": part.get_content_type(),
+            "size": len(payload),
+            "_payload": payload,
+        })
+    return out
+
+
+def cmd_attachments(args: argparse.Namespace) -> None:
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    conn = imap_connect(acct)
+    try:
+        typ, _ = conn.select(f'"{args.folder}"', readonly=True)
+        _imap_check(typ, _, f"SELECT {args.folder}")
+        typ, fetched = conn.uid("fetch", args.uid.encode(), "(RFC822)")
+        _imap_check(typ, fetched, "FETCH")
+        if not fetched or fetched[0] is None:
+            die(f"No message with UID {args.uid} in {args.folder}.")
+        msg = email.message_from_bytes(fetched[0][1])
+    finally:
+        conn.logout()
+
+    parts = list_attachments(msg)
+    if not parts:
+        die(f"UID {args.uid} has no attachments.")
+
+    if not args.save:
+        meta = [{k: v for k, v in p.items() if k != "_payload"} for p in parts]
+        emit(args, {"uid": args.uid, "attachments": meta},
+             lambda: "\n".join(
+                 f"  [{p['index']}] {p['filename']}  "
+                 f"({p['content_type']}, {p['size']:,} bytes)" for p in meta))
+        return
+
+    outdir = Path(args.outdir).expanduser()
+    outdir.mkdir(parents=True, exist_ok=True)
+    wanted = args.index
+    saved = []
+    for p in parts:
+        if wanted and p["index"] not in wanted:
+            continue
+        # Never let a crafted filename escape the output directory.
+        safe = Path(p["filename"]).name or f"part{p['index']}.bin"
+        dest = outdir / safe
+        if dest.exists() and not args.overwrite:
+            die(f"{dest} exists (use --overwrite)")
+        dest.write_bytes(p["_payload"])
+        saved.append({"index": p["index"], "path": str(dest), "size": p["size"]})
+    if not saved:
+        die(f"no attachment matched --index {wanted}")
+    emit(args, {"saved": saved},
+         lambda: "\n".join(f"  saved {s['path']} ({s['size']:,} bytes)" for s in saved))
+
+
 def cmd_search(args: argparse.Namespace) -> None:
     cfg = load_config()
     _, acct = get_account(cfg, args.account)
@@ -613,6 +686,16 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--folder", default="INBOX")
     sp.add_argument("--mark-read", action="store_true", help="clear the unread flag")
     sp.set_defaults(func=cmd_read)
+
+    sp = sub.add_parser("attachments", help="list or save a message's attachments")
+    sp.add_argument("uid")
+    sp.add_argument("--folder", default="INBOX")
+    sp.add_argument("--save", action="store_true", help="write files to --outdir")
+    sp.add_argument("--outdir", default=".", help="destination dir (default: cwd)")
+    sp.add_argument("--index", type=int, action="append", metavar="N",
+                    help="only this attachment number (repeatable; default all)")
+    sp.add_argument("--overwrite", action="store_true", help="replace existing files")
+    sp.set_defaults(func=cmd_attachments)
 
     sp = sub.add_parser("search", help="search FROM/SUBJECT/BODY for a term")
     sp.add_argument("query")
