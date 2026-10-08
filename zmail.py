@@ -522,6 +522,11 @@ def build_message(acct: dict[str, Any], args: argparse.Namespace) -> EmailMessag
     msg.set_content(body or "")
     for path in getattr(args, "attach", None) or []:
         _attach_file(msg, path)
+    # Fold headers at RFC 5322's hard limit (998), not 78: at 78 the default policy
+    # RFC 2047-encodes any longer unbreakable token, which mangles long Message-IDs
+    # (e.g. Outlook's) in In-Reply-To/References and breaks threading. Switched only
+    # now, after the body is encoded, so base64 lines keep RFC 2045's 76-char limit.
+    msg.policy = msg.policy.clone(max_line_length=998)
     return msg
 
 
