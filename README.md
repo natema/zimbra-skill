@@ -149,6 +149,8 @@ python3 zmail.py -a work draft --to X --subject S (--body T | --body-file F) \
 python3 zmail.py -a work reply <UID> (--body T | --body-file F) \
                      [--reply-all] [--cc ...] [--attach FILE ...] [--quote]
 python3 zmail.py -a work send  ... --yes-really-send        # guarded
+python3 zmail.py -a work attachments <UID> [--save] [--index N ...] [--outdir DIR]
+python3 zmail.py -a work export <UID> [<UID> ...] [--folder INBOX] [--outdir DIR] [--name F]
 python3 zmail.py -a work archive <UID> [--folder INBOX] [--to Archive]
 python3 zmail.py -a work delete  <UID> [--folder INBOX]              # -> Trash
 python3 zmail.py -a work delete  <UID> --purge --yes-really-delete   # permanent (guarded)
@@ -161,6 +163,9 @@ python3 zmail.py accounts
   from the extension. Works for `draft`, `reply`, and `send`.
 - `check`/`search` print a `UID` in `[brackets]`; pass it to `read`. `read --json`
   includes the `message_id`, which you feed to `--in-reply-to` for a threaded reply.
+- `export` saves messages as raw `.eml` files (all headers and attachments, opens in
+  any mail client), named `<YYYY-MM-DD_HHMM>_<subject>.eml` by default. It is
+  read-only and never marks mail as read.
 
 ### Replying
 

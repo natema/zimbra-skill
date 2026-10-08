@@ -4,7 +4,8 @@ description: >-
   Read, search, and draft email on any Zimbra mailbox (e.g. university/lab
   Zimbra, RENATER Partage, Inria, CNRS) via IMAP/SMTP using the dependency-free
   zmail.py CLI. Use when the user wants to check their Zimbra inbox, summarize or
-  find messages, or prepare a reply as a draft they can review in webmail. Drafts
+  find messages, save messages as .eml files (e.g. to keep a record of a thread in
+  a project folder), or prepare a reply as a draft they can review in webmail. Drafts
   are staged by default; sending is separate and requires explicit confirmation.
 ---
 
@@ -96,6 +97,22 @@ python3 zmail.py -a work attachments 12345 --save --index 1 --outdir .   # just 
 actual files. Listing prints a 1-based index, filename, MIME type and size; feed the
 index back with `--index` (repeatable) to save a subset. Files are written under their
 own basename, and an existing file is never clobbered without `--overwrite`.
+
+## Exporting (.eml)
+
+```bash
+python3 zmail.py -a work export 12345 --outdir ~/records              # one message
+python3 zmail.py -a work export 12345 12346 12347 --folder Sent --outdir .   # several, one login
+python3 zmail.py -a work export 12345 --outdir . --name "01_offer.eml"  # choose the name
+```
+
+Saves the raw message, byte-for-byte as stored on the server, with all headers and
+attachments, so it opens in any mail client. Use it when the user wants to keep a
+record of emails in a project folder. It is read-only: messages are fetched with
+`BODY.PEEK[]`, so unread mail stays unread. The default name is
+`<YYYY-MM-DD_HHMM>_<subject>.eml` (sender's local time), cleaned of path separators;
+existing files are never clobbered without `--overwrite`. A UID that doesn't exist in
+the folder gives a warning and the others are still exported.
 
 ## Archiving
 

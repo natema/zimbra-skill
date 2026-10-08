@@ -341,6 +341,58 @@ def cmd_attachments(args: argparse.Namespace) -> None:
          lambda: "\n".join(f"  saved {s['path']} ({s['size']:,} bytes)" for s in saved))
 
 
+def eml_filename(msg: email.message.Message) -> str:
+    """Default export name: '<YYYY-MM-DD_HHMM>_<subject>.eml' (sender's local time)."""
+    try:
+        stamp = email.utils.parsedate_to_datetime(msg.get("Date")).strftime("%Y-%m-%d_%H%M")
+    except (TypeError, ValueError):
+        stamp = "nodate"
+    subject = _decode(msg.get("Subject")) or "no subject"
+    # Drop path separators and characters that are invalid on common filesystems,
+    # so a crafted subject can never escape the output directory.
+    subject = "".join("_" if c in '/\\:*?"<>|' or ord(c) < 32 else c for c in subject)
+    subject = " ".join(subject.split()).strip(". ")[:120] or "no subject"
+    return f"{stamp}_{subject}.eml"
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    if args.name and len(args.uid) > 1:
+        die("--name only works with a single UID")
+    cfg = load_config()
+    _, acct = get_account(cfg, args.account)
+    outdir = Path(args.outdir).expanduser()
+    outdir.mkdir(parents=True, exist_ok=True)
+    saved, missing = [], []
+    conn = imap_connect(acct)
+    try:
+        typ, _ = conn.select(f'"{args.folder}"', readonly=True)
+        _imap_check(typ, _, f"SELECT {args.folder}")
+        for uid in args.uid:
+            # BODY.PEEK[] returns the raw message without setting \Seen.
+            typ, fetched = conn.uid("fetch", uid.encode(), "(BODY.PEEK[])")
+            _imap_check(typ, fetched, "FETCH")
+            if not fetched or fetched[0] is None:
+                missing.append(uid)
+                continue
+            raw = fetched[0][1]
+            msg = email.message_from_bytes(raw)
+            dest = outdir / (Path(args.name).name if args.name else eml_filename(msg))
+            if dest.exists() and not args.overwrite:
+                die(f"{dest} exists (use --overwrite)")
+            dest.write_bytes(raw)
+            saved.append({"uid": uid, "path": str(dest), "size": len(raw),
+                          "subject": _decode(msg.get("Subject"))})
+    finally:
+        conn.logout()
+
+    for uid in missing:
+        print(f"warning: no message with UID {uid} in {args.folder}", file=sys.stderr)
+    if not saved:
+        die("nothing exported")
+    emit(args, {"saved": saved, "missing": missing},
+         lambda: "\n".join(f"  saved {s['path']} ({s['size']:,} bytes)" for s in saved))
+
+
 def cmd_search(args: argparse.Namespace) -> None:
     cfg = load_config()
     _, acct = get_account(cfg, args.account)
@@ -696,6 +748,15 @@ def main(argv: list[str] | None = None) -> None:
                     help="only this attachment number (repeatable; default all)")
     sp.add_argument("--overwrite", action="store_true", help="replace existing files")
     sp.set_defaults(func=cmd_attachments)
+
+    sp = sub.add_parser("export", help="save messages as raw .eml files (read-only)")
+    sp.add_argument("uid", nargs="+", help="one or more UIDs")
+    sp.add_argument("--folder", default="INBOX")
+    sp.add_argument("--outdir", default=".", help="destination dir (default: cwd)")
+    sp.add_argument("--name", help="file name to use (single UID only; "
+                                   "default: <YYYY-MM-DD_HHMM>_<subject>.eml)")
+    sp.add_argument("--overwrite", action="store_true", help="replace existing files")
+    sp.set_defaults(func=cmd_export)
 
     sp = sub.add_parser("search", help="search FROM/SUBJECT/BODY for a term")
     sp.add_argument("query")
