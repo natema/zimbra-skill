@@ -400,20 +400,7 @@ def cmd_search(args: argparse.Namespace) -> None:
     try:
         typ, _ = conn.select(f'"{args.folder}"', readonly=True)
         _imap_check(typ, _, f"SELECT {args.folder}")
-        # Search FROM/SUBJECT/BODY for the term. Prefer charset UTF-8 (accents),
-        # but some servers (e.g. CNRS Zimbra) reject the charset arg with a BAD
-        # response — raised as imaplib.IMAP4.error, not a non-OK typ — so fall
-        # back to the same full query without a charset (ASCII).
-        term = args.query
-        query = ("OR", "OR", "FROM", _q(term), "SUBJECT", _q(term), "BODY", _q(term))
-        try:
-            typ, data = conn.uid("search", "UTF-8", *query)
-            if typ != "OK":
-                typ, data = conn.uid("search", None, *query)
-        except imaplib.IMAP4.error:
-            typ, data = conn.uid("search", None, *query)
-        _imap_check(typ, data, "SEARCH")
-        uids = data[0].split()[-args.limit:][::-1]
+        uids = search_uids(conn, args.query)[-args.limit:][::-1]
         rows = []
         for uid in uids:
             typ, fetched = conn.uid(
@@ -498,7 +485,55 @@ def cmd_delete(args: argparse.Namespace) -> None:
 
 
 def _q(s: str) -> str:
-    return s  # imaplib quotes args containing spaces automatically
+    """Quote a string as an IMAP astring.
+
+    imaplib does NOT quote arguments containing spaces, so an unquoted
+    multi-word term is sent as several bare tokens and the server rejects the
+    second one as an unknown search key.
+    """
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def search_uids(conn: imaplib.IMAP4, term: str) -> list[bytes]:
+    """UIDs whose FROM, SUBJECT or BODY match `term`, newest last.
+
+    Works around two server/library quirks:
+      * the charset argument must be written "CHARSET UTF-8", and some servers
+        (CNRS Zimbra) reject it entirely, so we retry without it;
+      * imaplib cannot place non-ASCII inside a command (it encodes args as
+        ASCII), so a non-ASCII term must travel as a literal. Only one literal
+        fits per command, so such terms are searched one key at a time and the
+        results unioned.
+    """
+    if term.isascii():
+        query = ("OR", "OR", "FROM", _q(term), "SUBJECT", _q(term),
+                 "BODY", _q(term))
+        for charset in (("CHARSET", "UTF-8"), ()):
+            try:
+                typ, data = conn.uid("search", *charset, *query)
+            except imaplib.IMAP4.error:
+                continue
+            if typ == "OK":
+                return data[0].split() if data and data[0] else []
+        raise imaplib.IMAP4.error(f"SEARCH rejected for term {term!r}")
+
+    found: set[bytes] = set()
+    worked = False
+    for key in ("FROM", "SUBJECT", "BODY"):
+        try:
+            conn.literal = term.encode("utf-8")
+            typ, data = conn.uid("search", "CHARSET", "UTF-8", key)
+        except (imaplib.IMAP4.error, UnicodeEncodeError):
+            continue
+        if typ == "OK":
+            worked = True
+            if data and data[0]:
+                found.update(data[0].split())
+    if not worked:
+        raise imaplib.IMAP4.error(
+            f"server rejected a non-ASCII SEARCH for {term!r}; "
+            "try an unaccented term")
+    return sorted(found, key=int)
 
 
 def build_message(acct: dict[str, Any], args: argparse.Namespace) -> EmailMessage:
