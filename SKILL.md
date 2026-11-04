@@ -46,6 +46,7 @@ python3 zmail.py -a work folders                     # list folders
 python3 zmail.py -a work read 12345                  # full message by UID
 python3 zmail.py -a work read 12345 --json           # structured (has message_id)
 python3 zmail.py -a work search "grant deadline" --limit 10
+python3 zmail.py -a work search "alice" --to --folder Sent   # recipient search: To/Cc headers only
 ```
 
 `check`/`search` print a UID in `[brackets]`; feed that UID to `read`.

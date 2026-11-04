@@ -400,7 +400,10 @@ def cmd_search(args: argparse.Namespace) -> None:
     try:
         typ, _ = conn.select(f'"{args.folder}"', readonly=True)
         _imap_check(typ, _, f"SELECT {args.folder}")
-        uids = search_uids(conn, args.query)[-args.limit:][::-1]
+        # --to: match the term only in the To/Cc headers (e.g. a recipient's
+        # surname or address when scanning the Sent folder).
+        keys = ("TO", "CC") if args.to else ("FROM", "SUBJECT", "BODY")
+        uids = search_uids(conn, args.query, keys)[-args.limit:][::-1]
         rows = []
         for uid in uids:
             typ, fetched = conn.uid(
@@ -494,8 +497,9 @@ def _q(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def search_uids(conn: imaplib.IMAP4, term: str) -> list[bytes]:
-    """UIDs whose FROM, SUBJECT or BODY match `term`, newest last.
+def search_uids(conn: imaplib.IMAP4, term: str,
+                keys: tuple[str, ...] = ("FROM", "SUBJECT", "BODY")) -> list[bytes]:
+    """UIDs where any of the header/body `keys` matches `term`, newest last.
 
     Works around two server/library quirks:
       * the charset argument must be written "CHARSET UTF-8", and some servers
@@ -506,8 +510,9 @@ def search_uids(conn: imaplib.IMAP4, term: str) -> list[bytes]:
         results unioned.
     """
     if term.isascii():
-        query = ("OR", "OR", "FROM", _q(term), "SUBJECT", _q(term),
-                 "BODY", _q(term))
+        query: tuple[str, ...] = ("OR",) * (len(keys) - 1)
+        for key in keys:
+            query += (key, _q(term))
         for charset in (("CHARSET", "UTF-8"), ()):
             try:
                 typ, data = conn.uid("search", *charset, *query)
@@ -519,7 +524,7 @@ def search_uids(conn: imaplib.IMAP4, term: str) -> list[bytes]:
 
     found: set[bytes] = set()
     worked = False
-    for key in ("FROM", "SUBJECT", "BODY"):
+    for key in keys:
         try:
             conn.literal = term.encode("utf-8")
             typ, data = conn.uid("search", "CHARSET", "UTF-8", key)
@@ -802,6 +807,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("query")
     sp.add_argument("--folder", default="INBOX")
     sp.add_argument("--limit", type=int, default=20)
+    sp.add_argument("--to", action="store_true",
+                    help="match the term in To/Cc headers only (recipient search)")
     sp.set_defaults(func=cmd_search)
 
     for name, help_ in (("draft", "stage a draft in the Drafts folder"),
